@@ -9,8 +9,7 @@ export function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Cache for iCal data - stores { data: string, timestamp: number }
+
   const icalCache = useRef(null);
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
@@ -19,27 +18,26 @@ export function App() {
       setLoading(true);
       setError(null);
 
-      // Normalize webcal protocol to https for fetch compatibility (e.g., Google private iCal links)
-      const rawUrl = import.meta.env.VITE_ICAL_URL;
+      const rawUrl = import.meta.env.VITE_CLOUDFLARE_URL;
       const icalUrl = rawUrl ? rawUrl.replace(/^webcal:\/\//i, "https://") : "";
       if (!icalUrl) {
-        throw new Error("Please set VITE_ICAL_URL in your .env file");
+        throw new Error("Please set VITE_CLOUDFLARE_URL in your .env file");
       }
 
       // Check if we have valid cached data
       const now = Date.now();
       let icalData;
-      
-      if (icalCache.current && 
-          icalCache.current.timestamp && 
-          (now - icalCache.current.timestamp) < CACHE_DURATION) {
-        // Use cached data
+
+      if (
+        icalCache.current &&
+        icalCache.current.timestamp &&
+        now - icalCache.current.timestamp < CACHE_DURATION
+      ) {
         console.log("Using cached iCal data");
         icalData = icalCache.current.data;
       } else {
-        // Fetch fresh data
         console.log("Fetching fresh iCal data");
-        
+
         const sharedSecret = import.meta.env.VITE_SHARED_SECRET;
         if (!sharedSecret) {
           throw new Error("Please set VITE_SHARED_SECRET in your .env file");
@@ -57,46 +55,49 @@ export function App() {
           throw new Error(`Worker returned ${response.status}: ${errorText}`);
         }
         icalData = await response.text();
-        
-        // Update cache
+
         icalCache.current = {
           data: icalData,
-          timestamp: now
+          timestamp: now,
         };
       }
 
-      // Parse the iCal data
       const jcalData = ICAL.parse(icalData);
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents("vevent");
 
       const calendarEvents = [];
 
-      // Define a reasonable expansion window: 1 month back to 1 year forward
       const nowDate = new Date();
       const rangeStart = ICAL.Time.fromJSDate(
-        new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, nowDate.getDate())
+        new Date(
+          nowDate.getFullYear(),
+          nowDate.getMonth() - 1,
+          nowDate.getDate()
+        )
       );
       const rangeEnd = ICAL.Time.fromJSDate(
-        new Date(nowDate.getFullYear() + 1, nowDate.getMonth(), nowDate.getDate())
+        new Date(
+          nowDate.getFullYear() + 1,
+          nowDate.getMonth(),
+          nowDate.getDate()
+        )
       );
 
       vevents.forEach((vevent) => {
         const event = new ICAL.Event(vevent);
 
-        // Handle recurring events by expanding occurrences within the defined range
         if (event.isRecurring()) {
           const iterator = event.iterator();
           let next;
           let iterations = 0;
-          const MAX_ITERATIONS = 1000; // safety guard to prevent infinite loops
+          const MAX_ITERATIONS = 1000;
 
           while ((next = iterator.next())) {
             if (next.compare(rangeEnd) > 0 || iterations > MAX_ITERATIONS)
               break;
             iterations += 1;
 
-            // Only include occurrences within our desired window
             if (next.compare(rangeStart) >= 0) {
               const occ = event.getOccurrenceDetails(next);
               calendarEvents.push({
@@ -109,7 +110,6 @@ export function App() {
             }
           }
         } else {
-          // Single (non-recurring) events
           if (event.startDate) {
             calendarEvents.push({
               id: event.uid || `${event.summary}-${event.startDate}`,
@@ -122,7 +122,6 @@ export function App() {
         }
       });
 
-      // Final tidy-up: filter invalid items and update state
       setEvents(calendarEvents.filter((ev) => ev.start && ev.title));
     } catch (err) {
       console.error("Error fetching calendar events:", err);
@@ -135,10 +134,9 @@ export function App() {
   useEffect(() => {
     fetchCalendarEvents();
 
-    // Auto refresh calendar every 15 minutes
     const interval = setInterval(() => {
       fetchCalendarEvents();
-    }, 5 * 60 * 1000);
+    }, 5 * 60 * 1000); // 5 minutes
 
     return () => clearInterval(interval);
   }, []);
@@ -152,8 +150,8 @@ export function App() {
           </div>
           <div className="text-gray-600 mb-4 text-sm">{error}</div>
           <div className="text-xs text-gray-500 mb-4">
-            Make sure your .env file contains VITE_ICAL_URL with a valid public
-            iCal URL
+            Make sure your .env file contains VITE_CLOUDFLARE_URL with a valid
+            public iCal URL
           </div>
           <button
             onClick={fetchCalendarEvents}
