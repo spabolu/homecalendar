@@ -356,7 +356,8 @@ export function App() {
     return () => clearInterval(interval);
   }, [fetchCalendarEvents]);
 
-  if (error) {
+  // Show the full-page loader or error screen ONLY during the very first load
+  if (error && events.length === 0) {
     return (
       <div className="h-screen bg-white flex items-center justify-center">
         <div className="p-8 max-w-md text-center">
@@ -373,7 +374,7 @@ export function App() {
     );
   }
 
-  if (loading) {
+  if (loading && events.length === 0) {
     return (
       <div className="h-screen bg-white flex items-center justify-center">
         <div className="text-center">
@@ -387,7 +388,7 @@ export function App() {
   return (
     <>
       <WorldClock />
-      <div className="h-screen bg-white">
+      <div className="relative h-screen bg-white">
         <FullCalendar
           ref={calendarRef}
           {...calendarConfig}
@@ -397,6 +398,12 @@ export function App() {
           eventContent={eventContent}
           eventDidMount={eventDidMount}
         />
+        {/* Overlay while silently refreshing events */}
+        {loading && events.length > 0 && (
+          <div className="absolute bottom-0 inset-x-0 py-2 bg-white shadow-md z-20 flex items-center justify-center pointer-events-none">
+            <div className="text-gray-600 text-xl font-bold">Refreshing…</div>
+          </div>
+        )}
       </div>
     </>
   );
