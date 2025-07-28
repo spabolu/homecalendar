@@ -1,8 +1,151 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+} from "preact/hooks";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import ICAL from "ical.js";
+import WorldClock from "./components/WorldClock";
+
+// constants for better performance
+const FETCH_INTERVAL = 2 * 60 * 1000; // 2 minutes
+const TIME_UPDATE_INTERVAL = 30 * 60 * 1000; // 30 minutes
+const HOURS_TO_SHOW = 15;
+const HOURS_BEFORE = 4;
+const MAX_RECURRING_EVENTS = 1000;
+
+// family member settings
+const FAMILY_CONFIG = {
+  Amma: { color: "#E55555", initials: "Am" }, // coral red
+  Dad: { color: "#3BB3AA", initials: "D" }, // teal
+  Abi: { color: "#3A9BC1", initials: "Ab" }, // sky blue
+  Anya: { color: "#7FB89E", initials: "An" }, // mint green
+  Saketh: { color: "#E5B547", initials: "S" }, // golden yellow
+  Family: { color: "#7F8C8D", initials: "F" }, // gray (default)
+};
+
+// regex to find names in titles
+const TITLE_PATTERN = /^(Amma|Dad|Abi|Anya|Saketh):\s*/i;
+
+// helper functions
+const getFamilyMemberColor = (name) =>
+  FAMILY_CONFIG[name]?.color || FAMILY_CONFIG.Family.color;
+const getInitials = (name) =>
+  FAMILY_CONFIG[name]?.initials || name.charAt(0).toUpperCase();
+
+const formatHour = (hour) => `${hour.toString().padStart(2, "0")}:00:00`;
+
+const formatTime = (date) => {
+  const minutes = date.getMinutes();
+  const options = { hour: "numeric", hour12: true };
+  if (minutes !== 0) options.minute = "2-digit";
+  return new Intl.DateTimeFormat("en-US", options)
+    .format(date)
+    .toLowerCase()
+    .replace(" ", "");
+};
+
+const getOptimalTimeWindow = () => {
+  const now = new Date();
+  const currentHour = now.getHours();
+  const hoursAfter = HOURS_TO_SHOW - HOURS_BEFORE;
+
+  let startHour = Math.max(0, currentHour - HOURS_BEFORE);
+  let endHour = Math.min(24, currentHour + hoursAfter);
+
+  // make sure hours are correct
+  if (startHour === 0 && currentHour < HOURS_BEFORE) {
+    endHour = Math.min(24, HOURS_TO_SHOW);
+  }
+  if (endHour === 24 && currentHour > 24 - hoursAfter) {
+    startHour = Math.max(0, 24 - HOURS_TO_SHOW);
+  }
+
+  return {
+    slotMinTime: formatHour(startHour),
+    slotMaxTime: formatHour(endHour),
+  };
+};
+
+const extractOrganizerInfo = (event) => {
+  try {
+    // get organizer from ical event
+    const organizerProp = event.component.getFirstProperty("organizer");
+    if (organizerProp) {
+      const email = organizerProp.getFirstValue();
+      const cleanEmail = email?.replace(/^mailto:/i, "");
+      const cnParam = organizerProp.getParameter("cn");
+      const name = cnParam || cleanEmail || "Family";
+      return {
+        name,
+        email: cleanEmail,
+        source: "organizer_property",
+        color: getFamilyMemberColor(name),
+      };
+    }
+
+    // or get name from event title
+    const title = event.summary || "";
+    const titleMatch = title.match(TITLE_PATTERN);
+    if (titleMatch) {
+      const name =
+        titleMatch[1].charAt(0).toUpperCase() +
+        titleMatch[1].slice(1).toLowerCase();
+      return {
+        name,
+        email: null,
+        source: "title_pattern",
+        color: getFamilyMemberColor(name),
+      };
+    }
+
+    // if no name found, default to family
+    return {
+      name: "Family",
+      email: null,
+      source: "default",
+      color: getFamilyMemberColor("Family"),
+    };
+  } catch (e) {
+    console.warn("Error parsing organizer info:", e);
+    return {
+      name: "Family",
+      email: null,
+      source: "default",
+      color: getFamilyMemberColor("Family"),
+    };
+  }
+};
+
+// function to create calendar events
+const createCalendarEvent = (eventData, organizer) => {
+  const { id, title: rawTitle, start, end, allDay, description } = eventData;
+
+  // remove name from title if it's there
+  let title = rawTitle || "untitled";
+  if (organizer.source === "title_pattern") {
+    title = title.replace(TITLE_PATTERN, "").trim();
+  }
+
+  return {
+    id,
+    title,
+    start,
+    end,
+    allDay,
+    backgroundColor: organizer.color,
+    borderColor: organizer.color,
+    textColor: "#fff",
+    extendedProps: {
+      organizer,
+      description: description || "",
+    },
+  };
+};
 
 export function App() {
   const calendarRef = useRef(null);
@@ -10,152 +153,218 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const icalCache = useRef(null);
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+  // for the time display on the side
+  const currentTimeSlots = useMemo(() => getOptimalTimeWindow(), []);
+  const [timeSlots, setTimeSlots] = useState(currentTimeSlots);
 
-  const fetchCalendarEvents = async () => {
+  // so we don't recalculate dates
+  const dateRanges = useMemo(() => {
+    const today = new Date();
+    return {
+      startRange: ICAL.Time.fromJSDate(
+        new Date(today.getFullYear(), today.getMonth() - 1, today.getDate())
+      ),
+      endRange: ICAL.Time.fromJSDate(
+        new Date(today.getFullYear() + 1, today.getMonth(), today.getDate())
+      ),
+    };
+  }, []);
+
+  const fetchCalendarEvents = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       const rawUrl = import.meta.env.VITE_CLOUDFLARE_URL;
-      const icalUrl = rawUrl ? rawUrl.replace(/^webcal:\/\//i, "https://") : "";
-      if (!icalUrl) {
-        throw new Error("Please set VITE_CLOUDFLARE_URL in your .env file");
-      }
+      const icalUrl = rawUrl?.replace(/^webcal:\/\//i, "https://");
+      if (!icalUrl) throw new Error("VITE_CLOUDFLARE_URL not set");
 
-      // Check if we have valid cached data
-      const now = Date.now();
-      let icalData;
+      console.log("Fetching iCal data");
+      const secret = import.meta.env.VITE_SHARED_SECRET;
+      if (!secret) throw new Error("VITE_SHARED_SECRET not set");
 
-      if (
-        icalCache.current &&
-        icalCache.current.timestamp &&
-        now - icalCache.current.timestamp < CACHE_DURATION
-      ) {
-        console.log("Using cached iCal data");
-        icalData = icalCache.current.data;
-      } else {
-        console.log("Fetching fresh iCal data");
+      const response = await fetch(icalUrl, {
+        headers: { "x-ical-key": secret },
+      });
+      if (!response.ok) throw new Error(`Worker error: ${response.status}`);
 
-        const sharedSecret = import.meta.env.VITE_SHARED_SECRET;
-        if (!sharedSecret) {
-          throw new Error("Please set VITE_SHARED_SECRET in your .env file");
-        }
+      const icalData = await response.text();
 
-        const fetchOptions = {
-          headers: {
-            "x-ical-key": sharedSecret,
-          },
-        };
-
-        const response = await fetch(icalUrl, fetchOptions);
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => "Unknown error");
-          throw new Error(`Worker returned ${response.status}: ${errorText}`);
-        }
-        icalData = await response.text();
-
-        icalCache.current = {
-          data: icalData,
-          timestamp: now,
-        };
-      }
-
-      const jcalData = ICAL.parse(icalData);
-      const comp = new ICAL.Component(jcalData);
+      const jcal = ICAL.parse(icalData);
+      const comp = new ICAL.Component(jcal);
       const vevents = comp.getAllSubcomponents("vevent");
 
-      const calendarEvents = [];
+      const { startRange, endRange } = dateRanges;
+      const calEvents = [];
 
-      const nowDate = new Date();
-      const rangeStart = ICAL.Time.fromJSDate(
-        new Date(
-          nowDate.getFullYear(),
-          nowDate.getMonth() - 1,
-          nowDate.getDate()
-        )
-      );
-      const rangeEnd = ICAL.Time.fromJSDate(
-        new Date(
-          nowDate.getFullYear() + 1,
-          nowDate.getMonth(),
-          nowDate.getDate()
-        )
-      );
+      vevents.forEach((ve) => {
+        const ev = new ICAL.Event(ve);
+        const organizer = extractOrganizerInfo(ev);
 
-      vevents.forEach((vevent) => {
-        const event = new ICAL.Event(vevent);
+        if (ev.isRecurring()) {
+          // for recurring events
+          const iter = ev.iterator();
+          let next,
+            count = 0;
 
-        if (event.isRecurring()) {
-          const iterator = event.iterator();
-          let next;
-          let iterations = 0;
-          const MAX_ITERATIONS = 1000;
+          while ((next = iter.next()) && count < MAX_RECURRING_EVENTS) {
+            if (next.compare(endRange) > 0) break;
+            count++;
 
-          while ((next = iterator.next())) {
-            if (next.compare(rangeEnd) > 0 || iterations > MAX_ITERATIONS)
-              break;
-            iterations += 1;
-
-            if (next.compare(rangeStart) >= 0) {
-              const occ = event.getOccurrenceDetails(next);
-              calendarEvents.push({
-                id: `${event.uid || event.summary}-${next.toString()}`,
-                title: event.summary || "Untitled Event",
-                start: occ.startDate.toJSDate(),
-                end: occ.endDate ? occ.endDate.toJSDate() : null,
-                allDay: occ.startDate.isDate,
-              });
+            if (next.compare(startRange) >= 0) {
+              const occurrence = ev.getOccurrenceDetails(next);
+              calEvents.push(
+                createCalendarEvent(
+                  {
+                    id: `${ev.uid}-${next}`,
+                    title: ev.summary,
+                    start: occurrence.startDate.toJSDate(),
+                    end: occurrence.endDate?.toJSDate() || null,
+                    allDay: occurrence.startDate.isDate,
+                    description: ev.description,
+                  },
+                  organizer
+                )
+              );
             }
           }
-        } else {
-          if (event.startDate) {
-            calendarEvents.push({
-              id: event.uid || `${event.summary}-${event.startDate}`,
-              title: event.summary || "Untitled Event",
-              start: event.startDate.toJSDate(),
-              end: event.endDate ? event.endDate.toJSDate() : null,
-              allDay: event.startDate.isDate,
-            });
-          }
+        } else if (ev.startDate) {
+          // for single events
+          calEvents.push(
+            createCalendarEvent(
+              {
+                id: ev.uid || ev.summary,
+                title: ev.summary,
+                start: ev.startDate.toJSDate(),
+                end: ev.endDate?.toJSDate() || null,
+                allDay: ev.startDate.isDate,
+                description: ev.description,
+              },
+              organizer
+            )
+          );
         }
       });
 
-      setEvents(calendarEvents.filter((ev) => ev.start && ev.title));
+      setEvents(calEvents.filter((e) => e.start && e.title));
     } catch (err) {
-      console.error("Error fetching calendar events:", err);
+      console.error("Fetch error:", err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRanges]);
 
+  // how events look on the calendar
+  const eventContent = useCallback((eventInfo) => {
+    const { event } = eventInfo;
+    const organizer = event.extendedProps.organizer;
+    const start = formatTime(event.start);
+    const end = event.end ? formatTime(event.end) : null;
+
+    return (
+      <div className="p-1 text-xs relative h-full">
+        <div className="truncate font-semibold text-xl subpixel-antialiased">
+          {event.title}
+        </div>
+        <div className="text-base opacity-90 font-medium subpixel-antialiased">
+          {`${start}${end && end !== start ? ` - ${end}` : ""}`}
+        </div>
+        {organizer?.name !== "Family" && (
+          <div
+            className="absolute w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-medium"
+            style={{
+              backgroundColor: "rgba(0,0,0,0.9)",
+              width: "24px",
+              height: "24px",
+              fontSize: "12px",
+              bottom: "3px",
+              right: "0px",
+            }}
+          >
+            {getInitials(organizer.name)}
+          </div>
+        )}
+      </div>
+    );
+  }, []);
+
+  // for tooltips on hover
+  const eventDidMount = useCallback((info) => {
+    const { organizer, description } = info.event.extendedProps;
+    let tooltip = "";
+
+    if (organizer) {
+      tooltip =
+        organizer.source === "organizer_property"
+          ? `Created by: ${organizer.name}${
+              organizer.email ? ` (${organizer.email})` : ""
+            }`
+          : organizer.source === "title_pattern"
+          ? `Event by: ${organizer.name}`
+          : "Family event";
+    }
+
+    if (description) tooltip += `\n\nDescription: ${description}`;
+
+    info.el.title = tooltip;
+    info.el.style.cursor = "pointer";
+  }, []);
+
+  // fullcalendar settings
+  const calendarConfig = useMemo(
+    () => ({
+      plugins: [timeGridPlugin, dayGridPlugin],
+      initialView: "timeGridWeek",
+      headerToolbar: { left: "title", center: "", right: "prev,next" },
+      dayHeaderFormat: { weekday: "short", month: "numeric", day: "numeric" },
+      allDaySlot: true,
+      allDayText: "all-day",
+      slotDuration: "00:30:00",
+      slotLabelInterval: "01:00:00",
+      nowIndicator: true,
+      height: "100%",
+      // height: "auto",
+      expandRows: false,
+      editable: false,
+      selectable: false,
+      eventDisplay: "block",
+      displayEventTime: true,
+      eventTimeFormat: {
+        hour: "numeric",
+        minute: "2-digit",
+        meridiem: "short",
+        omitZeroMinute: true,
+      },
+    }),
+    []
+  );
+
+  // update time window every so often
   useEffect(() => {
-    fetchCalendarEvents();
+    const updateTimeSlots = () => setTimeSlots(getOptimalTimeWindow());
 
-    const interval = setInterval(() => {
-      fetchCalendarEvents();
-    }, 5 * 60 * 1000); // 5 minutes
-
+    updateTimeSlots();
+    const interval = setInterval(updateTimeSlots, TIME_UPDATE_INTERVAL);
     return () => clearInterval(interval);
   }, []);
 
+  // get calendar data when page loads and then every few minutes
+  useEffect(() => {
+    fetchCalendarEvents();
+    const interval = setInterval(fetchCalendarEvents, FETCH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchCalendarEvents]);
+
   if (error) {
     return (
-      <div className="h-screen bg-white font-['Inter',sans-serif] flex items-center justify-center">
-        <div className="text-center p-8 max-w-md">
-          <div className="text-red-600 text-lg font-semibold mb-2">
-            Calendar Error
-          </div>
+      <div className="h-screen bg-white flex items-center justify-center">
+        <div className="p-8 max-w-md text-center">
+          <div className="text-red-600 mb-2">Calendar error</div>
           <div className="text-gray-600 mb-4 text-sm">{error}</div>
-          <div className="text-xs text-gray-500 mb-4">
-            Make sure your .env file contains VITE_CLOUDFLARE_URL with a valid
-            public iCal URL
-          </div>
           <button
             onClick={fetchCalendarEvents}
-            className="px-4 py-2 bg-black text-white text-sm hover:bg-gray-800 transition-colors"
+            className="px-4 py-2 bg-black text-white text-sm"
           >
             Retry
           </button>
@@ -166,55 +375,29 @@ export function App() {
 
   if (loading) {
     return (
-      <div className="h-screen bg-white font-['Inter',sans-serif] flex items-center justify-center">
+      <div className="h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="text-lg font-semibold mb-2">Loading Calendar...</div>
-          <div className="text-gray-600">Fetching events from iCal source</div>
+          <div className="mb-2 font-semibold">Loading calendar...</div>
+          <div className="text-gray-600">Fetching events</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-white font-['Inter',sans-serif]">
-      <FullCalendar
-        ref={calendarRef}
-        plugins={[timeGridPlugin, dayGridPlugin]}
-        initialView="timeGridWeek"
-        events={events}
-        headerToolbar={{
-          left: "title",
-          center: "",
-          right: "prev,next",
-        }}
-        dayHeaderFormat={{
-          weekday: "short",
-          month: "numeric",
-          day: "numeric",
-        }}
-        allDaySlot={true}
-        allDayText="all-day"
-        slotMinTime="06:00:00"
-        slotMaxTime="22:00:00"
-        slotDuration="00:30:00"
-        slotLabelInterval="01:00:00"
-        nowIndicator={true}
-        contentHeight="auto"
-        expandRows={true}
-        editable={false}
-        selectable={false}
-        eventStartEditable={false}
-        eventDurationEditable={false}
-        eventResizableFromStart={false}
-        droppable={false}
-        eventDisplay="block"
-        displayEventTime={false}
-        eventTimeFormat={{
-          hour: "numeric",
-          minute: "2-digit",
-          meridiem: false,
-        }}
-      />
-    </div>
+    <>
+      <WorldClock />
+      <div className="h-screen bg-white">
+        <FullCalendar
+          ref={calendarRef}
+          {...calendarConfig}
+          events={events}
+          slotMinTime={timeSlots.slotMinTime}
+          slotMaxTime={timeSlots.slotMaxTime}
+          eventContent={eventContent}
+          eventDidMount={eventDidMount}
+        />
+      </div>
+    </>
   );
 }
