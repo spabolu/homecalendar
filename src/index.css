@@ -1,0 +1,202 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap");
+@import "tailwindcss";
+
+/* FullCalendar custom styles to override defaults */
+.fc {
+  font-family: "Inter", sans-serif;
+}
+
+/* Header toolbar */
+.fc .fc-header-toolbar {
+  margin: 0;
+  margin-bottom: 0 !important;
+  padding: 10px 15px;
+  border-bottom: 1px solid #ddd;
+}
+
+.fc .fc-timegrid-now-indicator-line {
+  border-top-width: 3px !important;
+}
+
+.fc-dayGridMonth-view .fc-daygrid-day.fc-day-today .fc-daygrid-day-frame {
+  border: 2px solid var(--fc-border-color) !important;
+}
+.fc-timeGrid-view thead .fc-day.fc-day-today .fc-scrollgrid-sync-inner {
+  border: 2px solid var(--fc-border-color) !important;
+}
+
+.fc-timeGridWeek-view
+  thead
+  .fc-col-header-cell.fc-day-today
+  .fc-scrollgrid-sync-inner {
+  border: 2px solid var(--fc-border-color) !important;
+}
+
+.fc .fc-toolbar-title {
+  /* display: none; */
+  font-size: 18px;
+  font-weight: 800;
+}
+
+/* Navigation buttons */
+.fc .fc-button {
+  background: white;
+  border: 1px solid #ddd;
+  color: #000;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 0;
+}
+
+.fc .fc-button:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.fc .fc-button:disabled {
+  opacity: 0.5;
+}
+
+.fc .fc-button:focus {
+  box-shadow: none;
+}
+
+/* Day headers */
+.fc .fc-col-header-cell {
+  background: white;
+  border-right: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  padding: 8px 4px;
+}
+
+.fc .fc-col-header-cell-cushion {
+  font-size: 16px;
+  font-weight: 800;
+  color: #000;
+  text-transform: none;
+  padding: 0;
+}
+
+/* All day slot */
+.fc .fc-daygrid-event-harness {
+  margin: 1px;
+}
+
+.fc .fc-scrollgrid-section-liquid > td {
+  border-right: 1px solid #ddd;
+}
+
+/* Time slots */
+.fc .fc-timegrid-slot {
+  border-right: 1px solid #ddd;
+  height: 30px;
+  border-bottom: 1px dotted #eee;
+}
+
+.fc .fc-timegrid-slot-minor {
+  border-bottom: none;
+}
+
+.fc .fc-timegrid-slot-major {
+  border-bottom: 1px solid #ddd;
+}
+
+.fc .fc-timegrid-slot-label {
+  font-size: 16px;
+  color: #444;
+  font-weight: 500;
+  padding: 0 8px;
+  text-align: right;
+  border-right: 1px solid #ddd;
+  vertical-align: top;
+  padding-top: 2px;
+}
+
+.fc .fc-timegrid-slot-label-cushion {
+  padding: 0;
+}
+
+/* Grid lines */
+.fc .fc-scrollgrid td {
+  border-color: #ddd;
+}
+
+.fc .fc-scrollgrid-section-header td {
+  border-bottom: 1px solid #ddd;
+}
+
+/* Events */
+.fc-event {
+  background: #000 !important;
+  border: none !important;
+  border-radius: 7px !important;
+  color: white !important;
+  font-size: 18px !important;
+  font-weight: 400 !important;
+  padding: 4px 6px !important;
+  margin: 0 !important;
+  cursor: default !important;
+}
+
+.fc-event-title {
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+}
+
+.fc .fc-timegrid-event {
+  margin-bottom: 1px !important;
+}
+
+.fc .fc-daygrid-event {
+  margin-bottom: 1px !important;
+}
+
+/* Remove event dots */
+.fc-daygrid-event-dot {
+  display: none;
+}
+
+/* All day events */
+.fc .fc-daygrid-event-harness-abs {
+  top: 1px;
+  left: 1px;
+  right: 1px;
+}
+
+/* Remove today highlighting */
+.fc .fc-day-today {
+  background: white !important;
+}
+
+/* Remove scrollbars styling */
+.fc-scroller::-webkit-scrollbar {
+  width: 0;
+}
+
+/* Clean up borders */
+.fc .fc-scrollgrid {
+  border: 1px solid #ddd;
+}
+
+.fc .fc-scrollgrid-section-header > td {
+  border-top: none;
+}
+
+/* Remove event time display */
+.fc-event-time {
+  display: none !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .fc .fc-col-header-cell-cushion {
+    font-size: 10px;
+  }
+
+  .fc-event {
+    font-size: 10px !important;
+  }
+
+  .fc .fc-timegrid-slot-label {
+    font-size: 10px;
+  }
+}
