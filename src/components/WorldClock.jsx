@@ -1,35 +1,40 @@
-import { useState, useEffect, useMemo } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 
-// timezone settings
+// Configuration for the timezones to be displayed in the world clock.
+// Used Twemoji SVGs for better compatibility with Raspberry Pi
 const TIMEZONES = [
   {
     id: "local",
-    timezone: undefined, // use system timezone
+    timezone: undefined, // Uses the system's local timezone.
     emoji:
-      "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f3e0.svg", // using twemoji cuz i can't figure out raspberry pi's emoji support
+      "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f3e0.svg", // Home emoji
     alt: "Local",
   },
   {
     id: "nyc",
     timezone: "America/New_York",
     emoji:
-      "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f5fd.png", // using twemoji cuz i can't figure out raspberry pi's emoji support
+      "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f5fd.png", // Statue of Liberty emoji
     alt: "NYC",
   },
   {
     id: "ist",
     timezone: "Asia/Kolkata",
     emoji:
-       "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ee-1f1f3.svg", // using twemoji cuz i can't figure out raspberry pi's emoji support
+      "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ee-1f1f3.svg", // Flag of India emoji
     alt: "IST",
   },
 ];
 
-// world clock component
+/**
+ * A component that displays the current time in different timezones.
+ * The timezones are configured in the TIMEZONES constant.
+ */
 const WorldClock = () => {
+  // State to hold the current time, updated every second.
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // formatters for different timezones
+  // Memoized formatters for each timezone to avoid re-creating them on every render.
   const formatters = useMemo(() => {
     return TIMEZONES.map((tz) => ({
       ...tz,
@@ -43,11 +48,13 @@ const WorldClock = () => {
     }));
   }, []);
 
+  // Effect to update the current time every second.
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
 
+    // Cleanup function to clear the interval when the component unmounts.
     return () => clearInterval(timer);
   }, []);
 
@@ -56,15 +63,13 @@ const WorldClock = () => {
       <div className="flex items-center space-x-4">
         {formatters.map((config, index) => (
           <>
-            <div
-              key={config.id}
-              className="inline-flex space-x-2 text-2xl"
-            >
+            <div key={config.id} className="inline-flex space-x-2 text-2xl">
               <img src={config.emoji} alt={config.alt} className="w-6 h-6" />
               <span className="font-semibold font-mono text-gray-900">
                 {config.formatter.format(currentTime)}
               </span>
             </div>
+            {/* separator */}
             {index < formatters.length - 1 && (
               <div className="w-px h-5 bg-gray-400"></div>
             )}

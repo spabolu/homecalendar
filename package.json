@@ -4,6 +4,15 @@
   "version": "1.0.1",
   "description": "simple home calendar dashboard",
   "type": "module",
+  "homepage": "https://github.com/spabolu/homecalendar#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spabolu/homecalendar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/spabolu/homecalendar/issues"
+  },
+  "author": "spabolu",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",

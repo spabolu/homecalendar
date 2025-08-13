@@ -1,15 +1,21 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  useMemo,
-  useCallback,
-} from "preact/hooks";
+import dayGridPlugin from "@fullcalendar/daygrid";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import dayGridPlugin from "@fullcalendar/daygrid";
 import ICAL from "ical.js";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 import WorldClock from "./components/WorldClock";
+
+/**
+ * This is the main application component.
+ * It renders a FullCalendar instance with events fetched from an iCal feed.
+ * It also includes a WorldClock component.
+ */
 
 // constants for better performance
 const FETCH_INTERVAL = 2 * 60 * 1000; // 2 minutes
@@ -18,18 +24,24 @@ const HOURS_TO_SHOW = 15;
 const HOURS_BEFORE = 4;
 const MAX_RECURRING_EVENTS = 1000;
 
-// family member settings
-const FAMILY_CONFIG = {
-  Amma: { color: "#E55555", initials: "Am" }, // coral red
-  Dad: { color: "#3BB3AA", initials: "D" }, // teal
-  Abi: { color: "#3A9BC1", initials: "Ab" }, // sky blue
-  Anya: { color: "#7FB89E", initials: "An" }, // mint green
-  Saketh: { color: "#E5B547", initials: "S" }, // golden yellow
-  Family: { color: "#7F8C8D", initials: "F" }, // gray (default)
-};
+// Parse family configuration from environment variables, with a fallback to an empty array.
+const FAMILY_CONFIG_RAW = JSON.parse(
+  import.meta.env.VITE_FAMILY_CONFIG || "[]"
+);
 
-// regex to find names in titles
-const TITLE_PATTERN = /^(Amma|Dad|Abi|Anya|Saketh):\s*/i;
+// Convert the array of family members into a lookup object for efficient access.
+// The key is the family member's name, and the value is their configuration.
+const FAMILY_CONFIG = FAMILY_CONFIG_RAW.reduce((acc, member) => {
+  acc[member.name] = member;
+  return acc;
+}, {});
+
+// Dynamically create a regex to find names in titles based on FAMILY_CONFIG.
+// This avoids hardcoding names and makes the component more reusable.
+const familyMemberNames = Object.keys(FAMILY_CONFIG).filter(
+  (name) => name !== "Family"
+);
+const TITLE_PATTERN = new RegExp(`^(${familyMemberNames.join("|")}):\\s*`, "i");
 
 // helper functions
 const getFamilyMemberColor = (name) =>
