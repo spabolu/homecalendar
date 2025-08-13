@@ -7,8 +7,8 @@ A modern, responsive calendar dashboard built with Preact and Vite that displays
 ## 📸 Demo
 
 <p float="left">
-  <img src="assets/images/wall-dashboard.jpg" width="45%" />
   <img src="assets/images/dashboard.jpg" width="45%" />
+  <img src="assets/images/wall-dashboard.jpg" width="45%" />
 </p>
 
 ## ✨ Features
