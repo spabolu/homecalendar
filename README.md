@@ -111,7 +111,7 @@ The application requires a Cloudflare Worker to securely proxy iCal feeds. See `
 
 ## 🏗 Architecture
 
-```mermaid
+```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Frontend      │    │  Cloudflare      │    │   iCal Feed     │
 │   (Preact)      │───▶│   Worker         │───▶│  (Google Cal)   │
