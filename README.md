@@ -4,6 +4,13 @@ A modern, responsive calendar dashboard built with Preact and Vite that displays
 
 ![Calendar Dashboard](https://img.shields.io/badge/Status-Live-brightgreen) ![Build](https://img.shields.io/badge/Build-Passing-success) ![License](https://img.shields.io/badge/License-MIT-blue)
 
+## 📸 Demo
+
+<p float="left">
+  <img src="assets/images/wall-dashboard.jpg" width="45%" />
+  <img src="assets/images/dashboard.jpg" width="45%" />
+</p>
+
 ## ✨ Features
 
 - **📅 Interactive Calendar**: Clean, responsive calendar interface with week/day views
