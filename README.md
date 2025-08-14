@@ -29,6 +29,9 @@ A modern, responsive calendar dashboard built with Preact and Vite that displays
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
 - **iCal Parsing**: [ICAL.js](https://github.com/mozilla-comm/ical.js/) - Calendar data processing
 - **Deployment**: Docker + Cloudflare Workers for backend proxy
+- **Hardware**:
+  -  Acer 15.6" Portable Monitor (from Costco)
+  -  Raspberry Pi 4 or any computer
 
 ## 🚀 Quick Start
 
